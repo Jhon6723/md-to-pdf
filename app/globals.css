@@ -1,0 +1,172 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+:root {
+  --background: #f0f0f0;
+  --foreground: #1f1f1f;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.gdocs-page {
+  width: min(100%, 8.5in);
+  min-height: 11in;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.18), 0 4px 12px rgb(0 0 0 / 0.08);
+  color: #000000;
+}
+
+.gdocs-content {
+  min-height: 9in;
+  padding: 1in;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11pt;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.gdocs-content > :first-child {
+  margin-top: 0;
+}
+
+.gdocs-content h1,
+.gdocs-content h2,
+.gdocs-content h3,
+.gdocs-content h4,
+.gdocs-content h5,
+.gdocs-content h6 {
+  color: #000000;
+  font-weight: 700;
+  line-height: 1.15;
+  page-break-after: avoid;
+}
+
+.gdocs-content h1 {
+  margin: 1.25em 0 0.5em;
+  font-size: 20pt;
+}
+
+.gdocs-content h2 {
+  margin: 1.15em 0 0.5em;
+  font-size: 16pt;
+}
+
+.gdocs-content h3 {
+  margin: 1.1em 0 0.45em;
+  font-size: 14pt;
+}
+
+.gdocs-content h4 {
+  margin: 1em 0 0.45em;
+  font-size: 13pt;
+}
+
+.gdocs-content h5 {
+  margin: 1em 0 0.4em;
+  font-size: 12pt;
+}
+
+.gdocs-content h6 {
+  margin: 1em 0 0.35em;
+  font-size: 11pt;
+}
+
+.gdocs-content p {
+  margin: 0.75em 0;
+}
+
+.gdocs-content ul,
+.gdocs-content ol {
+  margin: 0.8em 0 1em;
+  padding-left: 2em;
+}
+
+.gdocs-content li {
+  margin: 0.3em 0;
+}
+
+.gdocs-content blockquote {
+  margin: 0.75em 0;
+  padding-left: 1em;
+  border-left: 2px solid #dadce0;
+  color: #5f6368;
+}
+
+.gdocs-content table {
+  width: 100%;
+  margin: 1.15em 0 1.35em;
+  border-collapse: collapse;
+  font-size: 11pt;
+  table-layout: auto;
+}
+
+.gdocs-content th,
+.gdocs-content td {
+  padding: 8px 10px;
+  border: 1px solid #000000;
+  text-align: left;
+  vertical-align: top;
+}
+
+.gdocs-content th {
+  background: #ffffff;
+  font-weight: 700;
+}
+
+.gdocs-content code {
+  border-radius: 4px;
+  background: #f1f3f4;
+  padding: 0.1em 0.3em;
+  color: #202124;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 0.95em;
+}
+
+.gdocs-content pre {
+  margin: 1em 0;
+  overflow-x: auto;
+  border-radius: 6px;
+  background: #f1f3f4;
+  padding: 12px;
+}
+
+.gdocs-content pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.gdocs-content img {
+  display: block;
+  max-width: 100%;
+  margin: 1em auto;
+  page-break-inside: avoid;
+}
+
+.gdocs-content hr {
+  margin: 1.5em 0;
+  border: 0;
+  border-top: 1px solid #dadce0;
+}
+
+.gdocs-content a {
+  color: #1a73e8;
+  text-decoration: underline;
+}
