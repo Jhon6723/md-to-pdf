@@ -28,40 +28,18 @@ SKIP_BIN_DOWNLOAD=1 npm install
 - Si Arial no está disponible en el entorno de conversión, Typst puede usar un fallback tipográfico compatible. No asumir que Arial exacto existe hasta validarlo en el entorno actual.
 - El preview web replica visualmente la página Carta centrada y los estilos principales, sin clonar toda la interfaz de Google Docs.
 
-## Modos de conversión
+## Imágenes
 
-La SPA ofrece un selector con dos modos:
-
-- `Conversión normal`: genera un PDF directo del Markdown con la plantilla de Google Docs.
-- `Trabajo universitario`: antepone una portada de página completa antes del cuerpo del documento.
-
-### Portada universitaria
-
-- La portada usa una página Carta completa con márgenes cero, un banner superior azul con el nombre del curso, el título del trabajo, la imagen de portada, los campos de estudiante/profesor/fecha y una barra inferior con el branding de Jala University.
-- Después de la portada se inserta un `#pagebreak()` explícito y el cuerpo del Markdown vuelve a los márgenes de 1 pulgada.
-- Los campos editables en la SPA son: curso, título del trabajo, nombre del estudiante, nombre del profesor y fecha.
-- La imagen de portada es opcional. Si el usuario no carga una, se usa la ilustración local por defecto en `assets/cover-illustration.svg`.
-- El branding de Jala University se toma de `assets/jala-university-brand.svg`.
-- La imagen de portada personalizada debe ser PNG, JPEG o WebP y no superar 5 MB.
-
-### API
-
-`POST /api/convert` acepta:
-
-- JSON para conversión normal y universitaria sin imagen personalizada.
-- Multipart form data cuando se carga una imagen de portada personalizada.
-
-Campos:
-
-- `markdown` (obligatorio, no vacío, máximo 2 MB).
-- `filename` (opcional).
-- `mode` (`normal` por defecto, o `university`).
-- `courseTitle`, `assignmentTitle`, `studentName`, `professorName`, `coverDate` (solo modo universitario).
-- `coverImage` (archivo multipart, solo modo universitario, opcional).
+- El endpoint `/api/convert` acepta `multipart/form-data` con los campos `markdown` (texto), `filename` (texto) y `images` (archivos, múltiples).
+- Las imágenes se escriben en el directorio temporal donde se compila Typst, por lo que Typst las resuelve por nombre de archivo.
+- El renderer extrae el basename de la URL en el Markdown (`![alt](ruta/foto.png)` se resuelve como `foto.png`) y lo busca entre las imágenes subidas. Si coincide, genera `#image("foto.png")`; si no, muestra un texto de marcador.
+- Las URLs remotas (http/https) no se embeben; se muestran como marcador de posición.
+- Validaciones: máximo 20 imágenes, 5 MB por imagen, extensiones png, jpg, jpeg, gif, svg, webp, bmp. Los nombres se sanitizan con `path.basename` para evitar path traversal.
+- El preview web usa object URLs (`URL.createObjectURL`) para mostrar las imágenes subidas en tiempo real. El componente `img` de ReactMarkdown intercepta el `src`, extrae el basename y lo reemplaza por el object URL correspondiente.
 
 ## Alcance funcional
 
-- Funciones esenciales: escribir Markdown, cargar archivos md, previsualizar, elegir nombre de archivo y descargar PDF.
+- Funciones esenciales: escribir Markdown, cargar archivos md, adjuntar imágenes, previsualizar, elegir nombre de archivo y descargar PDF.
 - No añadir operaciones LaTeX, exportación DOCX, Pandoc, búsqueda/reemplazo ni editor enriquecido visual salvo que el usuario cambie el alcance.
 
 ## Comandos de verificación
@@ -78,13 +56,25 @@ Build:
 npm run build
 ```
 
-Prueba manual de la API:
+Prueba manual de la API (sin imágenes):
 
 ```sh
 npm run start &
 curl -X POST http://localhost:3000/api/convert \
-  -H "Content-Type: application/json" \
-  -d '{"markdown":"# Titulo\n\nTexto","filename":"test"}' -o test.pdf
+  -F "markdown=# Titulo" \
+  -F "filename=test" \
+  -o test.pdf
+file test.pdf
+```
+
+Prueba manual de la API (con imágenes):
+
+```sh
+curl -X POST http://localhost:3000/api/convert \
+  -F "markdown=# Demo\n\n![logo](logo.png)" \
+  -F "filename=test" \
+  -F "images=@logo.png" \
+  -o test.pdf
 file test.pdf
 ```
 

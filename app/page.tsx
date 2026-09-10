@@ -1,7 +1,6 @@
 "use client";
 
-import Image from "next/image";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -37,43 +36,40 @@ Artillery separa la configuración declarativa YAML del código JavaScript adici
 - La exportación produce PDF, no DOCX.
 `;
 
-type DocumentMode = "normal" | "university";
-
-type CoverFields = {
-  courseTitle: string;
-  assignmentTitle: string;
-  studentName: string;
-  professorName: string;
-  coverDate: string;
-};
-
-const DEFAULT_COVER: CoverFields = {
-  courseTitle: "Programación 6",
-  assignmentTitle: "Tarea semana 8",
-  studentName: "Jhon Rivera",
-  professorName: "Jair Alarcon",
-  coverDate: "06 de agosto 2026",
-};
-
-type CoverImage = {
-  file: File;
-  url: string;
-};
-
 export default function Home() {
   const [markdown, setMarkdown] = useState(SAMPLE_MARKDOWN);
   const [filename, setFilename] = useState("documento");
-  const [mode, setMode] = useState<DocumentMode>("normal");
-  const [cover, setCover] = useState<CoverFields>(DEFAULT_COVER);
-  const [coverImage, setCoverImage] = useState<CoverImage | null>(null);
   const [converting, setConverting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [images, setImages] = useState<File[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const coverImageInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const cursorPos = useRef<{ start: number; end: number } | null>(null);
+  const dragCounter = useRef(0);
+
+  const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|svg|webp|bmp)$/i;
+  const MD_EXTENSIONS = /\.(md|markdown)$/i;
 
   const normalizedFilename = useMemo(() => {
     return filename.trim().replace(/\.(md|markdown|pdf)$/i, "") || "documento";
   }, [filename]);
+
+  const imageUrls = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const img of images) {
+      map[img.name] = URL.createObjectURL(img);
+    }
+    return map;
+  }, [images]);
+
+  useEffect(() => {
+    const urls = Object.values(imageUrls);
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [imageUrls]);
 
   async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -85,22 +81,105 @@ export default function Home() {
     event.target.value = "";
   }
 
-  function handleCoverFieldChange(field: keyof CoverFields, value: string) {
-    setCover((current) => ({ ...current, [field]: value }));
-  }
-
-  function handleCoverImageUpload(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (coverImage) URL.revokeObjectURL(coverImage.url);
-    setCoverImage({ file, url: URL.createObjectURL(file) });
-    setError(null);
+  function handleImageUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length === 0) return;
+    setImages((prev) => {
+      const existing = new Set(prev.map((f) => f.name));
+      const fresh = files.filter((f) => !existing.has(f.name));
+      return [...prev, ...fresh];
+    });
     event.target.value = "";
   }
 
-  function resetCoverImage() {
-    if (coverImage) URL.revokeObjectURL(coverImage.url);
-    setCoverImage(null);
+  function removeImage(name: string) {
+    setImages((prev) => prev.filter((f) => f.name !== name));
+  }
+
+  function insertImageMarkdown(names: string[]) {
+    const ta = textareaRef.current;
+    const start = ta && cursorPos.current !== null ? cursorPos.current.start : markdown.length;
+    const end = ta && cursorPos.current !== null ? cursorPos.current.end : markdown.length;
+    const snippets = names.map((n) => `![${n.replace(/\.[^.]+$/, "")}](${n})`);
+    const insert = snippets.join("\n\n");
+    const before = markdown.slice(0, start);
+    const after = markdown.slice(end);
+    const needsNewlineBefore = before.length > 0 && !before.endsWith("\n");
+    const needsNewlineAfter = after.length > 0 && !after.startsWith("\n");
+    const next = `${needsNewlineBefore ? "\n\n" : ""}${insert}${needsNewlineAfter ? "\n\n" : ""}`;
+    const newMarkdown = `${before}${next}${after}`;
+    setMarkdown(newMarkdown);
+    const newPos = start + next.length;
+    cursorPos.current = { start: newPos, end: newPos };
+    if (ta) {
+      requestAnimationFrame(() => {
+        ta.focus();
+        ta.setSelectionRange(newPos, newPos);
+      });
+    }
+  }
+
+  function addImageFiles(files: File[]) {
+    const imageFiles = files.filter((f) => IMAGE_EXTENSIONS.test(f.name));
+    if (imageFiles.length === 0) return;
+    const freshNames = imageFiles.map((f) => f.name);
+    setImages((prev) => {
+      const existing = new Set(prev.map((f) => f.name));
+      const fresh = imageFiles.filter((f) => !existing.has(f.name));
+      return [...prev, ...fresh];
+    });
+    insertImageMarkdown(freshNames);
+  }
+
+  async function loadMarkdownFile(file: File) {
+    const text = await file.text();
+    setMarkdown(text);
+    setFilename(file.name.replace(MD_EXTENSIONS, "") || "documento");
+    setError(null);
+  }
+
+  function handleDragEnter(event: React.DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    dragCounter.current += 1;
+    if (event.dataTransfer.types.includes("Files")) {
+      setIsDragging(true);
+    }
+  }
+
+  function handleDragLeave(event: React.DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    dragCounter.current -= 1;
+    if (dragCounter.current <= 0) {
+      dragCounter.current = 0;
+      setIsDragging(false);
+    }
+  }
+
+  function handleDragOver(event: React.DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  async function handleDrop(event: React.DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    dragCounter.current = 0;
+    setIsDragging(false);
+
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length === 0) return;
+
+    const mdFiles = files.filter((f) => MD_EXTENSIONS.test(f.name));
+    const imageFiles = files.filter((f) => IMAGE_EXTENSIONS.test(f.name));
+
+    if (mdFiles.length > 0) {
+      await loadMarkdownFile(mdFiles[0]);
+    }
+    if (imageFiles.length > 0) {
+      addImageFiles(imageFiles);
+    }
   }
 
   async function handleConvert() {
@@ -110,10 +189,8 @@ export default function Home() {
       const formData = new FormData();
       formData.append("markdown", markdown);
       formData.append("filename", normalizedFilename);
-      formData.append("mode", mode);
-      if (mode === "university") {
-        Object.entries(cover).forEach(([field, value]) => formData.append(field, value));
-        if (coverImage) formData.append("coverImage", coverImage.file, coverImage.file.name);
+      for (const img of images) {
+        formData.append("images", img, img.name);
       }
 
       const res = await fetch("/api/convert", {
@@ -158,6 +235,14 @@ export default function Home() {
             className="hidden"
             onChange={handleFileUpload}
           />
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp,image/bmp,.png,.jpg,.jpeg,.gif,.svg,.webp,.bmp"
+            multiple
+            className="hidden"
+            onChange={handleImageUpload}
+          />
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -165,18 +250,13 @@ export default function Home() {
           >
             Cargar .md
           </button>
-          <label className="sr-only" htmlFor="document-mode">
-            Tipo de conversión
-          </label>
-          <select
-            id="document-mode"
-            value={mode}
-            onChange={(event) => setMode(event.target.value as DocumentMode)}
-            className="rounded-md border border-[#dadce0] bg-white px-3 py-2 text-sm outline-none focus:border-[#1a73e8] focus:ring-2 focus:ring-[#d2e3fc]"
+          <button
+            type="button"
+            onClick={() => imageInputRef.current?.click()}
+            className="rounded-full border border-[#dadce0] bg-white px-4 py-2 text-sm font-medium text-[#1a73e8] hover:bg-[#f8fbff]"
           >
-            <option value="normal">Conversión normal</option>
-            <option value="university">Trabajo universitario</option>
-          </select>
+            Agregar imágenes
+          </button>
           <label className="sr-only" htmlFor="document-name">
             Nombre del archivo
           </label>
@@ -205,8 +285,14 @@ export default function Home() {
         </div>
       )}
 
-      <div className="grid flex-1 grid-cols-1 xl:grid-cols-[minmax(400px,0.88fr)_minmax(0,1.12fr)]">
-        <section className="flex min-h-[60vh] flex-col border-b border-[#dadce0] bg-white xl:border-b-0 xl:border-r">
+      <div className="grid flex-1 grid-cols-1 xl:grid-cols-[minmax(360px,0.85fr)_minmax(0,1.15fr)]">
+        <section
+          className="relative flex min-h-[60vh] flex-col border-b border-[#dadce0] bg-white xl:border-b-0 xl:border-r"
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
           <div className="flex items-center justify-between border-b border-[#dadce0] px-4 py-2">
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-[#5f6368]">Editor Markdown</p>
@@ -214,164 +300,99 @@ export default function Home() {
             </div>
             <span className="rounded-full bg-[#e9eefc] px-3 py-1 text-xs text-[#1a73e8]">Markdown</span>
           </div>
-
-          {mode === "university" && (
-            <fieldset className="border-b border-[#dadce0] bg-[#f8fafd] px-4 py-4">
-              <legend className="sr-only">Datos de portada universitaria</legend>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-[#1f1f1f]">Portada universitaria</h2>
-                  <p className="mt-1 text-xs text-[#5f6368]">Estos campos se usan solo para la primera página</p>
-                </div>
-                <span className="rounded-full bg-[#e8f0fe] px-3 py-1 text-xs font-medium text-[#1a73e8]">
-                  Jala University
-                </span>
-              </div>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                {(
-                  [
-                    ["courseTitle", "Curso"],
-                    ["assignmentTitle", "Tarea"],
-                    ["studentName", "Estudiante"],
-                    ["professorName", "Profesor"],
-                  ] as [keyof CoverFields, string][]
-                ).map(([field, label]) => (
-                  <div key={field}>
-                    <label htmlFor={`cover-${field}`} className="mb-1 block text-xs font-medium text-[#5f6368]">
-                      {label}
-                    </label>
-                    <input
-                      id={`cover-${field}`}
-                      type="text"
-                      value={cover[field]}
-                      onChange={(event) => handleCoverFieldChange(field, event.target.value)}
-                      className="w-full rounded-md border border-[#dadce0] bg-white px-3 py-2 text-sm outline-none focus:border-[#1a73e8] focus:ring-2 focus:ring-[#d2e3fc]"
-                    />
-                  </div>
-                ))}
-                <div>
-                  <label htmlFor="cover-date" className="mb-1 block text-xs font-medium text-[#5f6368]">
-                    Fecha
-                  </label>
-                  <input
-                    id="cover-date"
-                    type="text"
-                    value={cover.coverDate}
-                    onChange={(event) => handleCoverFieldChange("coverDate", event.target.value)}
-                    className="w-full rounded-md border border-[#dadce0] bg-white px-3 py-2 text-sm outline-none focus:border-[#1a73e8] focus:ring-2 focus:ring-[#d2e3fc]"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="cover-image" className="mb-1 block text-xs font-medium text-[#5f6368]">
-                    Imagen de portada
-                  </label>
-                  <input
-                    ref={coverImageInputRef}
-                    id="cover-image"
-                    type="file"
-                    accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={handleCoverImageUpload}
-                  />
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => coverImageInputRef.current?.click()}
-                      className="rounded-full border border-[#dadce0] bg-white px-3 py-2 text-xs font-medium text-[#1a73e8] hover:bg-[#f8fbff]"
-                    >
-                      Cambiar imagen
-                    </button>
-                    {coverImage && (
-                      <button
-                        type="button"
-                        onClick={resetCoverImage}
-                        className="rounded-full px-3 py-2 text-xs text-[#5f6368] hover:bg-[#f1f3f4]"
-                      >
-                        Restablecer
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </fieldset>
-          )}
-
           <textarea
+            ref={textareaRef}
             value={markdown}
             onChange={(event) => {
               setMarkdown(event.target.value);
+              cursorPos.current = { start: event.target.selectionStart, end: event.target.selectionEnd };
               if (error) setError(null);
             }}
+            onSelect={(event) => {
+              const ta = event.currentTarget;
+              cursorPos.current = { start: ta.selectionStart, end: ta.selectionEnd };
+            }}
+            onKeyUp={(event) => {
+              cursorPos.current = { start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd };
+            }}
+            onClick={(event) => {
+              cursorPos.current = { start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd };
+            }}
             spellCheck={false}
-            className="min-h-[60vh] flex-1 resize-none bg-white p-4 font-mono text-sm leading-6 text-[#1f1f1f] outline-none selection:bg-[#d2e3fc]"
+            className="min-h-[40vh] flex-1 resize-none bg-white p-4 font-mono text-sm leading-6 text-[#1f1f1f] outline-none selection:bg-[#d2e3fc]"
             placeholder="# Escribe aquí tu markdown..."
           />
+          {images.length > 0 && (
+            <div className="border-t border-[#dadce0] px-4 py-3">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-[#5f6368]">
+                Imágenes adjuntas ({images.length})
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {images.map((img) => (
+                  <span
+                    key={img.name}
+                    className="inline-flex items-center gap-2 rounded-full border border-[#dadce0] bg-[#f8f9fa] px-3 py-1 text-xs text-[#1f1f1f]"
+                  >
+                    {img.name}
+                    <button
+                      type="button"
+                      onClick={() => removeImage(img.name)}
+                      className="text-[#5f6368] hover:text-[#b3261e]"
+                      aria-label={`Quitar ${img.name}`}
+                    >
+                      x
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-[#80868b]">
+                Referencia cada imagen en el Markdown por su nombre, por ejemplo: !&#91;alt&#93;(foto.png)
+              </p>
+            </div>
+          )}
+          {isDragging && (
+            <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-[#1a73e8]/10 backdrop-blur-sm">
+              <div className="rounded-2xl border-2 border-dashed border-[#1a73e8] bg-white px-10 py-6 text-center shadow-lg">
+                <p className="text-base font-medium text-[#1a73e8]">Suelta tus archivos aquí</p>
+                <p className="mt-1 text-xs text-[#5f6368]">Imágenes o Markdown</p>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="flex min-h-[60vh] flex-col bg-[#f0f0f0]">
           <div className="flex items-center justify-between border-b border-[#dadce0] bg-[#f8f9fa] px-4 py-2">
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-[#5f6368]">Vista previa</p>
-              <p className="mt-1 text-xs text-[#80868b]">
-                {mode === "university" ? "Portada + documento Carta" : "Carta, márgenes de 1 pulgada, Arial 11 pt"}
-              </p>
+              <p className="mt-1 text-xs text-[#80868b]">Carta, márgenes de 1 pulgada, Arial 11 pt</p>
             </div>
             <span className="rounded-full bg-[#e6f4ea] px-3 py-1 text-xs text-[#137333]">Documento</span>
           </div>
-          <div className="flex flex-1 flex-col items-center gap-6 overflow-y-auto px-4 py-6 md:px-8">
-            {mode === "university" && (
-              <article className="gdocs-page relative overflow-hidden">
-                <div className="px-[0.28in] pt-[0.28in]">
-                  <div className="flex h-[0.42in] items-center justify-center rounded-md bg-[#3051d5] text-[11pt] font-bold text-white">
-                    {cover.courseTitle}
-                  </div>
-                </div>
-                <div className="flex h-[8.7in] flex-col items-center pt-[0.58in] text-[11pt] leading-[1.45]">
-                  <p className="font-bold">{cover.assignmentTitle}</p>
-                  <div className="mt-[0.32in] h-[2.15in] w-[2.15in]">
-                    {coverImage ? (
-                      <Image
-                        src={coverImage.url}
-                        alt="Imagen de portada"
-                        width={166}
-                        height={166}
-                        unoptimized
-                        className="h-full w-full object-fill"
-                      />
-                    ) : (
-                      <Image
-                        src="/cover-illustration.svg"
-                        alt="Ilustración académica"
-                        width={166}
-                        height={166}
-                        className="h-full w-full"
-                      />
-                    )}
-                  </div>
-                  <div className="mt-[0.3in] space-y-[0.18in]">
-                    <p className="font-medium">Presented by:</p>
-                    <p>{cover.studentName}</p>
-                    <p className="font-bold">Profesor:</p>
-                    <p>{cover.professorName}</p>
-                    <p className="font-bold">Fecha:</p>
-                    <p>{cover.coverDate}</p>
-                  </div>
-                </div>
-                <div className="absolute inset-x-[0.28in] bottom-[0.32in] flex h-[0.43in] items-center justify-center rounded-md bg-[#3051d5]">
-                  <Image
-                    src="/jala-university-brand.svg"
-                    alt="Jala University"
-                    width={150}
-                    height={38}
-                    className="h-full w-auto"
-                  />
-                </div>
-              </article>
-            )}
-
+          <div className="flex flex-1 justify-center overflow-y-auto px-4 py-6 md:px-8">
             <article className="gdocs-page">
               <div className="gdocs-content">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown}</ReactMarkdown>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    img: ({ src, alt }) => {
+                      const srcStr = typeof src === "string" ? src : "";
+                      const basename = srcStr.split("/").pop() || srcStr;
+                      const objectUrl = imageUrls[basename];
+                      if (objectUrl) {
+                        return (
+                          <img src={objectUrl} alt={alt} />
+                        );
+                      }
+                      return (
+                        <span style={{ fontStyle: "italic", color: "#5f6368" }}>
+                          Imagen no encontrada: {alt || srcStr}
+                        </span>
+                      );
+                    },
+                  }}
+                >
+                  {markdown}
+                </ReactMarkdown>
               </div>
             </article>
           </div>

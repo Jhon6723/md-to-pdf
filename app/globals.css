@@ -99,8 +99,29 @@ body {
   padding-left: 2em;
 }
 
+.gdocs-content ul {
+  list-style-type: disc;
+  list-style-position: outside;
+}
+
+.gdocs-content ol {
+  list-style-type: decimal;
+  list-style-position: outside;
+}
+
+.gdocs-content ul ul,
+.gdocs-content ol ol,
+.gdocs-content ul ol,
+.gdocs-content ol ul {
+  margin: 0.3em 0;
+}
+
 .gdocs-content li {
   margin: 0.3em 0;
+}
+
+.gdocs-content li::marker {
+  color: #000000;
 }
 
 .gdocs-content blockquote {
