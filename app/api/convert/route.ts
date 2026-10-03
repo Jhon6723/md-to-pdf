@@ -190,25 +190,66 @@ function inlinePlainText(nodes: PhrasingContent[]): string {
   }).join("");
 }
 
-function tableColumnWidths(table: Table, columnCount: number): string {
+function tableColumnWeights(table: Table, columnCount: number): string {
   const lengths = Array.from({ length: columnCount }, () => 1);
   for (const row of table.children) {
-    row.children.forEach((cell, index) => {
+    row.children.slice(0, columnCount).forEach((cell, index) => {
       const length = inlinePlainText(cell.children as PhrasingContent[]).length;
       lengths[index] = Math.max(lengths[index], length);
     });
   }
-  return `(${lengths.map((length) => `${Math.min(Math.max(length / 9, 1), 4).toFixed(2)}fr`).join(", ")},)`;
+  return `(${lengths.map((length) => Math.min(Math.max(length / 9, 1), 4).toFixed(2)).join(", ")},)`;
+}
+
+function inlineCodeWidthSamples(nodes: PhrasingContent[]): string[] {
+  return nodes.flatMap((node) => {
+    if (node.type === "inlineCode") return [`[#raw("${escapeTypstString(node.value)}")]`];
+    return "children" in node ? inlineCodeWidthSamples(node.children as PhrasingContent[]) : [];
+  });
+}
+
+function tableColumnMinimums(table: Table, columnCount: number): string {
+  const samples = Array.from({ length: columnCount }, () => new Set<string>());
+  for (const row of table.children) {
+    row.children.slice(0, columnCount).forEach((cell, index) => {
+      const nodes = cell.children as PhrasingContent[];
+      for (const word of inlinePlainText(nodes).split(/\s+/u).filter(Boolean)) {
+        samples[index].add(`[#strong[${escapeTypstText(word)}]]`);
+      }
+      for (const sample of inlineCodeWidthSamples(nodes)) samples[index].add(sample);
+    });
+  }
+  return `(${samples.map((column) => `calc.max(0pt, ${[...column].map((sample) => `measure(${sample}).width`).join(", ")}${column.size ? "," : ""}) + 17pt`).join(", ")},)`;
 }
 
 function renderTable(table: Table, ctx: RenderContext): string {
   const columnCount = table.children[0]?.children.length ?? 1;
-  const columnWidths = tableColumnWidths(table, columnCount);
+  const columnMinimums = tableColumnMinimums(table, columnCount);
+  const columnWeights = tableColumnWeights(table, columnCount);
   const [header, ...body] = table.children;
   const headerCells = header ? header.children.map((cell) => `[#strong[${renderInline(cell.children as PhrasingContent[], ctx)}]]`).join(", ") : "";
   const bodyCells = body.map((row) => renderTableRow(row, ctx)).join(" ");
-  const headerArgument = header ? `  table.header(${headerCells}),\n` : "";
-  return `#table(\n  columns: ${columnWidths},\n  stroke: 1pt + black,\n  inset: (x: 8pt, y: 7pt),\n  fill: white,\n${headerArgument}${bodyCells}\n)\n#v(0.85em, weak: true)\n\n`;
+  const headerArgument = header ? `    table.header(${headerCells}),\n` : "";
+  return `#layout(size => {
+  let minimums = ${columnMinimums}
+  let weights = ${columnWeights}
+  let minimum-total = minimums.sum()
+  let remaining = calc.max(0pt, size.width - minimum-total)
+  let columns = if minimum-total <= size.width {
+    minimums.enumerate().map(((index, minimum)) => minimum + remaining * weights.at(index) / weights.sum())
+  } else {
+    minimums.map(minimum => size.width * (minimum / minimum-total))
+  }
+  let content = table(
+    columns: columns,
+    stroke: 1pt + black,
+    inset: (x: 8pt, y: 7pt),
+    fill: white,
+${headerArgument}${bodyCells}
+  )
+  block(width: 100%, breakable: measure(content, width: size.width).height > size.height, content)
+})
+#v(0.85em, weak: true)\n\n`;
 }
 
 function renderTableRow(row: TableRow, ctx: RenderContext): string {

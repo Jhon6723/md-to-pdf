@@ -25,6 +25,8 @@ SKIP_BIN_DOWNLOAD=1 npm install
 - La salida PDF usa estilos generados en el código Typst basados en un documento nuevo de Google Docs.
 - Configuración de página: tamaño Carta, márgenes de 1 pulgada, Arial 11 pt para texto normal e interlineado 1.15.
 - Tablas: ancho completo del área útil, bordes negros de 1 pt, encabezado blanco y columnas con anchos proporcionales al contenido máximo. No usar columnas rígidamente iguales porque Google Docs adapta el ancho al texto de cada tabla.
+- Cada columna reserva un ancho mínimo medido con Typst: el ancho de la palabra más larga del texto plano (medida en negrita), los fragmentos de código en línea completos (inseparables) y el relleno interno de las celdas; el espacio restante se reparte con los pesos proporcionales. Si los mínimos no caben en la página, se escalan proporcionalmente.
+- Las tablas que caben en una página completa se mueven intactas a la página siguiente en lugar de partirse; las tablas más largas se dividen y repiten su encabezado en cada página.
 - Si Arial no está disponible en el entorno de conversión, Typst puede usar un fallback tipográfico compatible. No asumir que Arial exacto existe hasta validarlo en el entorno actual.
 - El preview web replica visualmente la página Carta centrada y los estilos principales, sin clonar toda la interfaz de Google Docs.
 
@@ -48,6 +50,12 @@ Typecheck:
 
 ```sh
 npm run typecheck
+```
+
+Pruebas de tablas (anchos medidos y paginación, usan Typst real):
+
+```sh
+npm run test:tables
 ```
 
 Build:
