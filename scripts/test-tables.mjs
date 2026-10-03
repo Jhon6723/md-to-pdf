@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -22,7 +22,13 @@ function compile(doc, name) {
   const typPath = path.join(workDir, `${name}.typ`);
   const pdfPath = path.join(workDir, `${name}.pdf`);
   writeFileSync(typPath, doc);
-  execFileSync(TYPST_BIN, ["compile", typPath, pdfPath], { cwd: workDir, timeout: 30_000 });
+  const result = spawnSync(TYPST_BIN, ["compile", ...renderer.TYPST_FONT_ARGS, typPath, pdfPath], {
+    cwd: workDir,
+    timeout: 30_000,
+    encoding: "utf-8",
+  });
+  assert.equal(result.status, 0, `typst compile failed: ${result.stderr}`);
+  assert.doesNotMatch(result.stderr, /unknown font family/i, result.stderr);
   return pdfPath;
 }
 
@@ -32,7 +38,7 @@ function pagesFor(doc, name, markers) {
     const rule = `#show "${text}": it => context [#metadata(here().page())#it]`;
     const typPath = path.join(workDir, `${name}-${label}.typ`);
     writeFileSync(typPath, `${rule}\n${doc}`);
-    const out = execFileSync(TYPST_BIN, ["query", typPath, "metadata", "--field", "value"], {
+    const out = execFileSync(TYPST_BIN, ["query", ...renderer.TYPST_FONT_ARGS, typPath, "metadata", "--field", "value"], {
       cwd: workDir,
       encoding: "utf-8",
       timeout: 30_000,
@@ -51,7 +57,7 @@ before(async () => {
     "class NextRequest {}\nclass NextResponse {\n  static json() { return null; }\n}"
   );
   const { outputText } = ts.transpileModule(
-    src + "\nexport { createTypstDocument, markdownToTypstBody };\n",
+    src + "\nexport { createTypstDocument, markdownToTypstBody, TYPST_FONT_ARGS };\n",
     { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }
   );
   writeFileSync(path.join(moduleDir, "renderer.mjs"), outputText);
@@ -119,4 +125,30 @@ test("edge-case tables compile", () => {
   for (const [name, markdown] of Object.entries(cases)) {
     compile(renderer.createTypstDocument(markdown, ctx), `edge-${name}`);
   }
+});
+
+test("bundled fonts work without system fonts", () => {
+  const fontFiles = [
+    "LiberationSans-Regular.ttf",
+    "LiberationSans-Bold.ttf",
+    "LiberationSans-Italic.ttf",
+    "LiberationSans-BoldItalic.ttf",
+    "LICENSE.txt",
+  ];
+  for (const file of fontFiles) {
+    assert.ok(existsSync(path.join(ROOT, "assets", "fonts", "liberation-sans", file)), `missing bundled asset ${file}`);
+  }
+  const fonts = execFileSync(TYPST_BIN, ["fonts", ...renderer.TYPST_FONT_ARGS, "--variants"], {
+    encoding: "utf-8",
+    timeout: 30_000,
+  });
+  assert.match(fonts, /Liberation Sans/);
+  assert.match(fonts, /DejaVu Sans Mono/);
+  const doc = renderer.createTypstDocument(
+    "# Tipografía reproducible\n\nNormal áéíóú ñ ü. **Negrita** *Cursiva* ***Ambas***\n\n`const valor = 42;`\n\n```js\nconst saludo = 'Hola';\n```",
+    ctx
+  );
+  assert.match(doc, /font: "Liberation Sans"/);
+  assert.match(doc, /#show raw: set text\(font: "DejaVu Sans Mono"\)/);
+  compile(doc, "fonts");
 });

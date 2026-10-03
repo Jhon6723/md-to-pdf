@@ -28,6 +28,8 @@ const CONVERSION_TIMEOUT_MS = 30_000;
 const EXE = process.platform === "win32" ? ".exe" : "";
 const LOCAL_TYPST = path.join(process.cwd(), "bin", `typst${EXE}`);
 const TYPST_BIN = existsSync(LOCAL_TYPST) ? LOCAL_TYPST : "typst";
+const FONT_DIR = path.join(process.cwd(), "assets", "fonts", "liberation-sans");
+const TYPST_FONT_ARGS = ["--font-path", FONT_DIR, "--ignore-system-fonts"];
 const ALLOWED_IMAGE_EXT = /\.(png|jpe?g|gif|svg|webp|bmp)$/i;
 
 class ConvertError extends Error {
@@ -165,7 +167,7 @@ function renderBlocks(nodes: RootContent[], ctx: RenderContext): string {
 
 function renderCodeBlock(value: string, lang: string | null): string {
   const language = lang ? `, lang: "${escapeTypstUrl(lang)}"` : "";
-  return `#block(fill: rgb("f1f3f4"), inset: 10pt, radius: 4pt, width: 100%)[#text(font: ("DejaVu Sans Mono", "Courier New", "Liberation Mono"), size: 9.5pt)[#raw("${escapeTypstString(value)}", block: true${language})]]\n\n`;
+  return `#block(fill: rgb("f1f3f4"), inset: 10pt, radius: 4pt, width: 100%)[#text(font: "DejaVu Sans Mono", size: 9.5pt)[#raw("${escapeTypstString(value)}", block: true${language})]]\n\n`;
 }
 
 function renderList(list: List, ctx: RenderContext): string {
@@ -274,11 +276,12 @@ function createTypstDocument(markdown: string, ctx: RenderContext): string {
   margin: (top: 1in, right: 1in, bottom: 1in, left: 1in)
 )
 #set text(
-  font: ("Arial", "Liberation Sans", "DejaVu Sans"),
+  font: "Liberation Sans",
   size: 11pt,
   fill: black,
   lang: "es"
 )
+#show raw: set text(font: "DejaVu Sans Mono")
 #set par(
   leading: 0.65em,
   spacing: 1.25em,
@@ -342,7 +345,7 @@ export async function POST(req: NextRequest) {
     await writeFile(inputPath, createTypstDocument(markdown, ctx), "utf-8");
 
     try {
-      await execFileAsync(TYPST_BIN, ["compile", inputPath, outputPath], {
+      await execFileAsync(TYPST_BIN, ["compile", ...TYPST_FONT_ARGS, inputPath, outputPath], {
         cwd: workDir,
         timeout: CONVERSION_TIMEOUT_MS,
         maxBuffer: 8 * 1024 * 1024,

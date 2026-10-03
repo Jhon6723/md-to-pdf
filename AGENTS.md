@@ -23,11 +23,12 @@ SKIP_BIN_DOWNLOAD=1 npm install
 ## Plantilla de salida
 
 - La salida PDF usa estilos generados en el código Typst basados en un documento nuevo de Google Docs.
-- Configuración de página: tamaño Carta, márgenes de 1 pulgada, Arial 11 pt para texto normal e interlineado 1.15.
+- Configuración de página: tamaño Carta, márgenes de 1 pulgada, Liberation Sans 11 pt para texto normal e interlineado 1.15. Liberation Sans es métricamente compatible con Arial, aunque su diseño visual no es idéntico.
 - Tablas: ancho completo del área útil, bordes negros de 1 pt, encabezado blanco y columnas con anchos proporcionales al contenido máximo. No usar columnas rígidamente iguales porque Google Docs adapta el ancho al texto de cada tabla.
 - Cada columna reserva un ancho mínimo medido con Typst: el ancho de la palabra más larga del texto plano (medida en negrita), los fragmentos de código en línea completos (inseparables) y el relleno interno de las celdas; el espacio restante se reparte con los pesos proporcionales. Si los mínimos no caben en la página, se escalan proporcionalmente.
 - Las tablas que caben en una página completa se mueven intactas a la página siguiente en lugar de partirse; las tablas más largas se dividen y repiten su encabezado en cada página.
-- Si Arial no está disponible en el entorno de conversión, Typst puede usar un fallback tipográfico compatible. No asumir que Arial exacto existe hasta validarlo en el entorno actual.
+- Las fuentes no dependen del sistema operativo: Liberation Sans (regular, negrita, cursiva y negrita-cursiva, versión 2.1.5 de fonts-liberation) se redistribuye en `assets/fonts/liberation-sans/` junto con su licencia SIL OFL 1.1 en LICENSE.txt. Typst compila con ese directorio como font-path e ignora las fuentes del sistema para una salida determinista. El código en línea y los bloques de código usan explícitamente DejaVu Sans Mono, que ya viene embebida en el binario de Typst.
+- La traza de salida del build incluye el binario de Typst y las fuentes empaquetadas para la ruta /api/convert, de modo que el despliegue tampoco dependa de fuentes ni binarios del sistema.
 - El preview web replica visualmente la página Carta centrada y los estilos principales, sin clonar toda la interfaz de Google Docs.
 
 ## Imágenes
