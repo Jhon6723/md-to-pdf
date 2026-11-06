@@ -53,10 +53,10 @@ Typecheck:
 npm run typecheck
 ```
 
-Pruebas de tablas (anchos medidos y paginación, usan Typst real):
+Pruebas de PDF (tablas, fuentes e imágenes, usan Typst real):
 
 ```sh
-npm run test:tables
+npm run test:pdf
 ```
 
 Build:
