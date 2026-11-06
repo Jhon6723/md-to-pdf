@@ -80,19 +80,19 @@ test("screenshot table compiles and uses measured minimum layout", () => {
   assert.match(body, /#layout\(size => \{/);
   assert.match(body, /let minimums = \(calc\.max\(0pt, measure\(\[#strong\[Herramienta\]\]\)\.width/);
   assert.match(body, /React\\\.memo/);
-  assert.match(body, /breakable: measure\(content, width: size\.width\)\.height > size\.height/);
+  assert.doesNotMatch(body, /breakable:/);
   compile(renderer.createTypstDocument(SCREENSHOT_TABLE, ctx), "screenshot");
 });
 
-test("short table after tall spacer stays on one page", () => {
+test("table after tall spacer starts on current page and continues on next page", () => {
   const preamble = renderer.createTypstDocument("", ctx);
   const body = renderer.markdownToTypstBody(SCREENSHOT_TABLE, ctx);
   const doc = `${preamble}\n#v(480pt)\n${body}`;
   const pages = pagesFor(doc, "short-table", [
-    { label: "hdr", text: "Herramienta" },
+    { label: "first", text: "React.memo" },
     { label: "last", text: "useMemo" },
   ]);
-  assert.deepEqual(pages.hdr, [2]);
+  assert.deepEqual(pages.first, [1]);
   assert.deepEqual(pages.last, [2]);
 });
 

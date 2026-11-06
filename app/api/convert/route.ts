@@ -242,14 +242,13 @@ function renderTable(table: Table, ctx: RenderContext): string {
   } else {
     minimums.map(minimum => size.width * (minimum / minimum-total))
   }
-  let content = table(
+  table(
     columns: columns,
     stroke: 1pt + black,
     inset: (x: 8pt, y: 7pt),
     fill: white,
 ${headerArgument}${bodyCells}
   )
-  block(width: 100%, breakable: measure(content, width: size.width).height > size.height, content)
 })
 #v(0.85em, weak: true)\n\n`;
 }
