@@ -5,7 +5,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
 import ts from "typescript";
+import { unified } from "unified";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ROUTE = path.join(ROOT, "app", "api", "convert", "route.ts");
@@ -13,6 +19,7 @@ const LOCAL_TYPST = path.join(ROOT, "bin", process.platform === "win32" ? "typst
 const TYPST_BIN = existsSync(LOCAL_TYPST) ? LOCAL_TYPST : "typst";
 
 let renderer;
+let imageNames;
 let moduleDir;
 let workDir;
 
@@ -52,16 +59,22 @@ function pagesFor(doc, name, markers) {
 before(async () => {
   moduleDir = mkdtempSync(path.join(ROOT, ".table-tests-"));
   workDir = mkdtempSync(path.join(tmpdir(), "table-tests-"));
-  const src = readFileSync(ROUTE, "utf8").replace(
-    'import { NextRequest, NextResponse } from "next/server";',
-    "class NextRequest {}\nclass NextResponse {\n  static json() { return null; }\n}"
-  );
+  const imageNamesSrc = readFileSync(path.join(ROOT, "lib", "image-names.ts"), "utf8");
+  const imageNamesOut = ts.transpileModule(imageNamesSrc, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  writeFileSync(path.join(moduleDir, "image-names.mjs"), imageNamesOut);
+  const src = readFileSync(ROUTE, "utf8")
+    .replace('import { NextRequest, NextResponse } from "next/server";',
+      "class NextRequest {}\nclass NextResponse {\n  static json() { return null; }\n}")
+    .replace('from "@/lib/image-names"', 'from "./image-names.mjs"');
   const { outputText } = ts.transpileModule(
     src + "\nexport { createTypstDocument, markdownToTypstBody, TYPST_FONT_ARGS };\n",
     { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }
   );
   writeFileSync(path.join(moduleDir, "renderer.mjs"), outputText);
   renderer = await import(pathToFileURL(path.join(moduleDir, "renderer.mjs")).href);
+  imageNames = await import(pathToFileURL(path.join(moduleDir, "image-names.mjs")).href);
 });
 
 after(() => {
@@ -166,4 +179,64 @@ test("bundled fonts work without system fonts", () => {
   assert.match(doc, /font: "Liberation Sans"/);
   assert.match(doc, /#show raw: set text\(font: "DejaVu Sans Mono"\)/);
   compile(doc, "fonts");
+});
+
+test("imageKey normalizes names, paths and percent-encoding", () => {
+  const { imageKey } = imageNames;
+  const expected = "Captura_desde_2026-10-09_16-02-14.png";
+  assert.equal(imageKey("Captura desde 2026-10-09 16-02-14.png"), expected);
+  assert.equal(imageKey("Captura%20desde%202026-10-09%2016-02-14.png"), expected);
+  assert.equal(imageKey("carpeta/Captura desde 2026-10-09 16-02-14.png"), expected);
+  assert.equal(imageKey("foto.png"), "foto.png");
+  assert.doesNotThrow(() => imageKey("%E0%A4%A.png"));
+});
+
+test("imageMarkdown produces parseable image syntax", () => {
+  const { imageKey, imageMarkdown } = imageNames;
+  const processor = unified().use(remarkParse);
+  for (const name of ["foto.png", "Captura desde 2026-10-09 16-02-14.png", "foto (1).png", "a[b].png"]) {
+    const tree = processor.runSync(processor.parse(imageMarkdown(name)));
+    const child = tree.children[0].children[0];
+    assert.equal(tree.children[0].children.length, 1, name);
+    assert.equal(child.type, "image", name);
+    assert.equal(imageKey(child.url), imageKey(name), `${name} -> ${child.url}`);
+  }
+  assert.equal(imageMarkdown("foto.png"), "![foto](foto.png)");
+});
+
+test("preview img lookup resolves the hast src", () => {
+  const { imageKey } = imageNames;
+  const spaced = "Captura desde 2026-10-09 16-02-14.png";
+  const expected = "Captura_desde_2026-10-09_16-02-14.png";
+  for (const md of [`![C](<${spaced}>)`, "![C](Captura%20desde%202026-10-09%2016-02-14.png)"]) {
+    const html = renderToStaticMarkup(
+      createElement(
+        ReactMarkdown,
+        {
+          remarkPlugins: [remarkGfm],
+          components: { img: ({ src }) => createElement("i", null, imageKey(String(src))) },
+        },
+        md
+      )
+    );
+    assert.ok(html.includes(expected), `${md} -> ${html}`);
+  }
+});
+
+test("PDF rendering resolves spaced image names", () => {
+  const { imageKey, imageMarkdown } = imageNames;
+  const name = "Captura desde 2026-10-09 16-02-14.png";
+  const key = imageKey(name);
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64"
+  );
+  writeFileSync(path.join(workDir, key), png);
+  const imgCtx = { images: new Set([key]) };
+  for (const md of [imageMarkdown(name), "![C](Captura%20desde%202026-10-09%2016-02-14.png)"]) {
+    const body = renderer.markdownToTypstBody(md, imgCtx);
+    assert.ok(body.includes(`#image("${key}")`), `${md} -> ${body}`);
+    assert.ok(!body.includes("Imagen no encontrada"), `${md} -> ${body}`);
+    compile(renderer.createTypstDocument(md, imgCtx), "image-spaces");
+  }
 });

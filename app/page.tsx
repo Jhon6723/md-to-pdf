@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { imageKey, imageMarkdown } from "@/lib/image-names";
 
 const SAMPLE_MARKDOWN = `# Tarea 8.4 — Análisis Teórico de Optimización de Bases de Datos
 
@@ -59,7 +60,7 @@ export default function Home() {
   const imageUrls = useMemo(() => {
     const map: Record<string, string> = {};
     for (const img of images) {
-      map[img.name] = URL.createObjectURL(img);
+      map[imageKey(img.name)] = URL.createObjectURL(img);
     }
     return map;
   }, [images]);
@@ -85,8 +86,8 @@ export default function Home() {
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
     setImages((prev) => {
-      const existing = new Set(prev.map((f) => f.name));
-      const fresh = files.filter((f) => !existing.has(f.name));
+      const existing = new Set(prev.map((f) => imageKey(f.name)));
+      const fresh = files.filter((f) => !existing.has(imageKey(f.name)));
       return [...prev, ...fresh];
     });
     event.target.value = "";
@@ -100,7 +101,7 @@ export default function Home() {
     const ta = textareaRef.current;
     const start = ta && cursorPos.current !== null ? cursorPos.current.start : markdown.length;
     const end = ta && cursorPos.current !== null ? cursorPos.current.end : markdown.length;
-    const snippets = names.map((n) => `![${n.replace(/\.[^.]+$/, "")}](${n})`);
+    const snippets = names.map(imageMarkdown);
     const insert = snippets.join("\n\n");
     const before = markdown.slice(0, start);
     const after = markdown.slice(end);
@@ -124,8 +125,8 @@ export default function Home() {
     if (imageFiles.length === 0) return;
     const freshNames = imageFiles.map((f) => f.name);
     setImages((prev) => {
-      const existing = new Set(prev.map((f) => f.name));
-      const fresh = imageFiles.filter((f) => !existing.has(f.name));
+      const existing = new Set(prev.map((f) => imageKey(f.name)));
+      const fresh = imageFiles.filter((f) => !existing.has(imageKey(f.name)));
       return [...prev, ...fresh];
     });
     insertImageMarkdown(freshNames);
@@ -346,7 +347,7 @@ export default function Home() {
                 ))}
               </div>
               <p className="mt-2 text-xs text-[#80868b]">
-                Referencia cada imagen en el Markdown por su nombre, por ejemplo: !&#91;alt&#93;(foto.png)
+                Referencia cada imagen por su nombre, por ejemplo: !&#91;alt&#93;(foto.png). Si el nombre tiene espacios, usa !&#91;alt&#93;(&lt;mi foto.png&gt;).
               </p>
             </div>
           )}
@@ -376,8 +377,7 @@ export default function Home() {
                   components={{
                     img: ({ src, alt }) => {
                       const srcStr = typeof src === "string" ? src : "";
-                      const basename = srcStr.split("/").pop() || srcStr;
-                      const objectUrl = imageUrls[basename];
+                      const objectUrl = imageUrls[imageKey(srcStr)];
                       if (objectUrl) {
                         return (
                           <img src={objectUrl} alt={alt} />

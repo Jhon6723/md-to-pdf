@@ -33,12 +33,13 @@ SKIP_BIN_DOWNLOAD=1 npm install
 
 ## Imágenes
 
+- El editor inserta referencias con imageMarkdown: nombres simples quedan como ![alt](foto.png) y los nombres con espacios o paréntesis usan destino entre ángulos, por ejemplo ![alt](<mi foto.png>), que es sintaxis válida de CommonMark.
 - El endpoint `/api/convert` acepta `multipart/form-data` con los campos `markdown` (texto), `filename` (texto) y `images` (archivos, múltiples).
 - Las imágenes se escriben en el directorio temporal donde se compila Typst, por lo que Typst las resuelve por nombre de archivo.
-- El renderer extrae el basename de la URL en el Markdown (`![alt](ruta/foto.png)` se resuelve como `foto.png`) y lo busca entre las imágenes subidas. Si coincide, genera `#image("foto.png")`; si no, muestra un texto de marcador.
+- El renderer normaliza la URL de la imagen en el Markdown con la función compartida imageKey de `lib/image-names.ts` (decodifica porcentajes, extrae el basename y reemplaza secuencias de caracteres fuera de [A-Za-z0-9_.-] por guion bajo) y la compara con la clave normalizada de cada imagen subida. Si coincide, genera `#image("nombre_clave.png")`; si no, muestra un texto de marcador.
 - Las URLs remotas (http/https) no se embeben; se muestran como marcador de posición.
-- Validaciones: máximo 20 imágenes, 5 MB por imagen, extensiones png, jpg, jpeg, gif, svg, webp, bmp. Los nombres se sanitizan con `path.basename` para evitar path traversal.
-- El preview web usa object URLs (`URL.createObjectURL`) para mostrar las imágenes subidas en tiempo real. El componente `img` de ReactMarkdown intercepta el `src`, extrae el basename y lo reemplaza por el object URL correspondiente.
+- Validaciones: máximo 20 imágenes, 5 MB por imagen, extensiones png, jpg, jpeg, gif, svg, webp, bmp. Los nombres se normalizan con imageKey (basename + reemplazo de caracteres especiales) para evitar path traversal y colisiones.
+- El preview web usa object URLs (`URL.createObjectURL`) indexados por imageKey(img.name). El componente `img` de ReactMarkdown intercepta el `src` (que llega codificado en porcentajes desde hast) y lo resuelve con el mismo imageKey.
 
 ## Alcance funcional
 

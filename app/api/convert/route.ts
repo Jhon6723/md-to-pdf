@@ -8,6 +8,7 @@ import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import { NextRequest, NextResponse } from "next/server";
+import { imageKey } from "@/lib/image-names";
 
 const execFileAsync = promisify(execFile);
 
@@ -42,10 +43,6 @@ function sanitizeFilename(name: string): string {
   const base = name.replace(/\.(md|markdown|pdf)$/i, "");
   const safe = base.replace(/[^a-zA-Z0-9áéíóúñüÁÉÍÓÚÑÜ._-]+/g, "-").replace(/^-+|-+$/g, "");
   return safe || "documento";
-}
-
-function sanitizeImageName(name: string): string {
-  return path.basename(name).replace(/[^\w.-]+/g, "_");
 }
 
 function escapeTypstText(value: string): string {
@@ -115,7 +112,7 @@ function renderLink(children: PhrasingContent[], url: string, ctx: RenderContext
 }
 
 function renderInlineImage(node: Image, ctx: RenderContext): string {
-  const basename = path.basename(node.url);
+  const basename = imageKey(node.url);
   if (ctx.images.has(basename)) {
     return `#image("${escapeTypstUrl(basename)}")`;
   }
@@ -123,7 +120,7 @@ function renderInlineImage(node: Image, ctx: RenderContext): string {
 }
 
 function renderBlockImage(node: Image, ctx: RenderContext): string {
-  const basename = path.basename(node.url);
+  const basename = imageKey(node.url);
   if (ctx.images.has(basename)) {
     return `#block[#image("${escapeTypstUrl(basename)}")]\n#v(0.5em)\n\n`;
   }
@@ -319,7 +316,7 @@ async function parseRequest(req: NextRequest): Promise<{
     if (entry.size > MAX_IMAGE_BYTES) {
       throw new ConvertError(413, `La imagen "${entry.name}" supera el límite de 5 MB`);
     }
-    images.set(sanitizeImageName(entry.name), entry);
+    images.set(imageKey(entry.name), entry);
   }
 
   const safeFilename = typeof filename === "string" ? sanitizeFilename(filename) : "documento";
