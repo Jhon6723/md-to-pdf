@@ -79,7 +79,7 @@ test("screenshot table compiles and uses measured minimum layout", () => {
   const body = renderer.markdownToTypstBody(SCREENSHOT_TABLE, ctx);
   assert.match(body, /#layout\(size => \{/);
   assert.match(body, /let minimums = \(calc\.max\(0pt, measure\(\[#strong\[Herramienta\]\]\)\.width/);
-  assert.match(body, /React\.memo/);
+  assert.match(body, /React\\\.memo/);
   assert.match(body, /breakable: measure\(content, width: size\.width\)\.height > size\.height/);
   compile(renderer.createTypstDocument(SCREENSHOT_TABLE, ctx), "screenshot");
 });
@@ -124,6 +124,21 @@ test("edge-case tables compile", () => {
   };
   for (const [name, markdown] of Object.entries(cases)) {
     compile(renderer.createTypstDocument(markdown, ctx), `edge-${name}`);
+  }
+});
+
+test("markup after inline code expressions cannot glue into them", () => {
+  const cases = [
+    "Ruta parsers/__init__.py al final.",
+    "**negrita**.py y *cursiva*.ext",
+    "**negrita**(sufijo) y `codigo`.py",
+    "[enlace](https://example.com).txt siguiente",
+    "![f](foto.png).nota",
+  ];
+  for (const md of cases) {
+    const doc = renderer.createTypstDocument(md, ctx);
+    assert.doesNotMatch(doc, /\]\.py|\]\(sufijo/, `unguarded continuation in ${doc}`);
+    compile(doc, `glue-${cases.indexOf(md)}`);
   }
 });
 

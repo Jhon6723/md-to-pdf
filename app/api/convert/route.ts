@@ -49,7 +49,7 @@ function sanitizeImageName(name: string): string {
 }
 
 function escapeTypstText(value: string): string {
-  return value.replace(/([\\#*_`$=<>\[\]{}\/@-])/g, "\\$1");
+  return value.replace(/([\\#*_`$=<>\[\]{}(\/@.-])/g, "\\$1");
 }
 
 function escapeTypstString(value: string): string {
